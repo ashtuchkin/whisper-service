@@ -1,7 +1,7 @@
 from pydantic import BaseSettings
 
 
-class _WhisperServiceConfig(BaseSettings, env_prefix="WS_", env_file = '.env'):
+class _WhisperServiceConfig(BaseSettings, env_prefix="WS_", env_file=".env"):
     # Whisper Model to use
     model: str = "medium.en"
 

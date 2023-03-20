@@ -1,0 +1,11 @@
+[Unit]
+Description=Whisper Service
+After=network.target
+
+[Service]
+WorkingDirectory=/home/ashtuchkin/code/whisper-service
+ExecStart=/usr/local/bin/poetry run uvicorn whisper_service.main:app --host '' --port 8000 --limit-concurrency 10
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

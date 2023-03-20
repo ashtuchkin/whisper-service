@@ -1,19 +1,17 @@
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from enum import Enum
-import io
 import threading
 import time
-from typing import Dict, Type
-from fastapi import HTTPException
-import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
+from fastapi import HTTPException
 from pydantic import BaseModel
-import torch
-from whisper_service.config import config
 from whisper import load_model, transcribe
 
+from whisper_service.config import config
+
 _tls = threading.local()
+
 
 def _init_worker():
     print(f"Loading model '{config.model}'")
@@ -21,9 +19,11 @@ def _init_worker():
     _tls.model = load_model(config.model)
     print(f"Loading successful after {time.time() - start_time:.2f} seconds")
 
+
 # Main worker thread that'll process the files. We use a thread pool to limit the number of concurrent requests.
 _worker_pool = ThreadPoolExecutor(max_workers=config.workers, initializer=_init_worker)
 _tasks_in_progress = 0
+
 
 class TranscribeParams(BaseModel):
     model: str = "whisper-1"  # Model to use; 'whisper-1' is the only one available now
@@ -37,9 +37,7 @@ def _transcribe_audio(audio: np.ndarray, params: TranscribeParams) -> dict:
     audio should be a numpy array dtype=np.float32, sampling rate 16000, mono.
     """
     assert params.model == "whisper-1", "Only whisper-1 is supported for now"
-    kwargs = {
-        "fp16": torch.cuda.is_available(),
-    }
+    kwargs = {}
     if params.temperature is not None:
         kwargs["temperature"] = params.temperature
     if params.language is not None:
@@ -50,6 +48,7 @@ def _transcribe_audio(audio: np.ndarray, params: TranscribeParams) -> dict:
     res_dict = transcribe(_tls.model, audio, **kwargs)
 
     return res_dict
+
 
 def _update_tasks_in_progress(delta: int):
     global _tasks_in_progress
