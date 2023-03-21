@@ -5,9 +5,10 @@ from typing import Annotated, Dict, Type
 
 import numpy as np
 from content_size_limit_asgi import ContentSizeLimitMiddleware
-from fastapi import FastAPI, File, Form, Response, UploadFile
+from fastapi import Body, FastAPI, File, Form, Query, Response, UploadFile
 from starlette.responses import JSONResponse
 from whisper.utils import ResultWriter, WriteJSON, WriteSRT, WriteTXT, WriteVTT
+from whisper_service.tts import SynthesisParams, async_voice_synthesize
 
 from whisper_service.whisper import TranscribeParams, async_transcribe
 
@@ -99,3 +100,31 @@ def _get_response(response_format: ResponseFormat, res_dict: dict) -> Response:
     writer.write_result(res_dict, output)
 
     return Response(output.getvalue(), media_type=content_type)
+
+
+@app.get("/v1/audio/voice_synthesis")
+async def voice_synthesis(
+    text: Annotated[str, Query(max_length=1000)],
+    speaker_idx: str | None = None,
+) -> Response:
+    params = SynthesisParams(
+        speaker_idx=speaker_idx,
+    )
+
+    samples, sampling_rate = await async_voice_synthesize(text, params)
+
+    wav_file_bytes = _to_wav_file(samples, sampling_rate)
+
+    return Response(wav_file_bytes, media_type="audio/wav")
+
+
+def _to_wav_file(samples: np.ndarray, sampling_rate: int) -> bytes:
+    samples = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
+
+    wav_file = io.BytesIO()
+    with wave.open(wav_file, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sampling_rate)
+        wav.writeframes(samples.data)
+    return wav_file.getvalue()
