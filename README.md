@@ -47,3 +47,18 @@ Hi there! I'm sorry, I am not capable of having a name as I am an AI language mo
 
 Either VITS or Tacotron2-DDC should be easily fine-tuned
 https://github.com/coqui-ai/TTS/blob/dev/recipes/ljspeech/vits_tts/train_vits.py
+
+
+## Opus encoding
+There are two python packages:
+ * pyogg - old version 0.6.14a1 in pypa; no encoder class there. Will likely require libopusenc, which is only available in Ubuntu 22.10+.
+ * opuslib - even older version, no docs, dev status planning, only opus stream (no ogg).
+
+So, we use command line utility `opusenc` from `opus-tools` package.
+
+
+Current stats for a 7-second segment:
+ * wav:  size 320 kB, time ~160ms
+ * opus: size  32 kB, time ~250ms; encoding time 110ms.
+
+I can probably optimize this by streaming, to make it even faster (<150ms total).

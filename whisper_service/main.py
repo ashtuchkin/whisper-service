@@ -1,3 +1,4 @@
+import asyncio
 import io
 import wave
 from enum import Enum
@@ -106,6 +107,7 @@ def _get_response(response_format: ResponseFormat, res_dict: dict) -> Response:
 async def voice_synthesis(
     text: Annotated[str, Query(max_length=1000)],
     speaker_idx: str | None = None,
+    response_format: str = "opus",
 ) -> Response:
     params = SynthesisParams(
         speaker_idx=speaker_idx,
@@ -113,9 +115,17 @@ async def voice_synthesis(
 
     samples, sampling_rate = await async_voice_synthesize(text, params)
 
-    wav_file_bytes = _to_wav_file(samples, sampling_rate)
+    match response_format:
+        case "wav":
+            file_bytes = _to_wav_file(samples, sampling_rate)
+            media_type = "audio/wav"
+        case "opus":
+            file_bytes = await _to_opus_file(samples, sampling_rate)
+            media_type = "audio/ogg"
+        case _:
+            raise ValueError(f"Unknown response format: {response_format}")
 
-    return Response(wav_file_bytes, media_type="audio/wav")
+    return Response(file_bytes, media_type=media_type)
 
 
 def _to_wav_file(samples: np.ndarray, sampling_rate: int) -> bytes:
@@ -128,3 +138,26 @@ def _to_wav_file(samples: np.ndarray, sampling_rate: int) -> bytes:
         wav.setframerate(sampling_rate)
         wav.writeframes(samples.data)
     return wav_file.getvalue()
+
+
+async def _to_opus_file(samples: np.ndarray, sampling_rate: int) -> bytes:
+    samples = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
+
+    # Note, default parameters are ok for us: 64kbps VBR, 48kHz, mono.
+    # start_time = time.time()
+    proc = await asyncio.create_subprocess_exec(
+        "opusenc",
+        "--raw",
+        "--quiet",
+        f"--raw-rate={sampling_rate}",
+        "--raw-chan=1",
+        "-",
+        "-",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        limit=256 * 1024,
+    )
+    # print(f"Process creation took {time.time() - start_time:.2f}s")  # 0.04s
+    output, _ = await proc.communicate(input=samples.data)
+    # print(f"Encoding took {time.time() - start_time:.2f}s")  # 0.11s - TODO: optimize
+    return output
