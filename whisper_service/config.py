@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic import BaseSettings
 
 
@@ -14,10 +15,17 @@ class _WhisperServiceConfig(BaseSettings, env_prefix="WS_", env_file=".env"):
     # TTS model to use
     tts_model: str = "tts_models/en/vctk/vits"
 
-    # TTS model speaker to use
+    # Default TTS model speaker to use
     tts_speaker_idx: str = "p273"
 
     # Number of TTS workers to use. Each worker will load the model in GPU memory.
     tts_workers: int = 1
+
+    # Whether to write speech samples to the 'speech_samples' directory
+    debug_speech_samples: bool = False
+
+    # Directory to write speech samples to (relative to the current working directory)
+    speech_samples_dir: Path = "./speech_samples"
+
 
 config = _WhisperServiceConfig()

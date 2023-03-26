@@ -4,8 +4,9 @@ After=network.target
 
 [Service]
 WorkingDirectory=/home/ashtuchkin/code/whisper-service
-ExecStart=/usr/local/bin/poetry run uvicorn whisper_service.main:app --host '' --port 8000 --limit-concurrency 10
+ExecStart=/home/ashtuchkin/code/whisper-service/.venv/bin/uvicorn whisper_service.main:app --host '' --port 8000 --limit-concurrency 10
 Restart=on-failure
+Environment=HOME=/root
 
 [Install]
 WantedBy=multi-user.target

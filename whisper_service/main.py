@@ -10,6 +10,7 @@ from fastapi import Body, FastAPI, File, Form, Query, Response, UploadFile
 from starlette.responses import JSONResponse
 from whisper.utils import ResultWriter, WriteJSON, WriteSRT, WriteTXT, WriteVTT
 from whisper_service.tts import SynthesisParams, async_voice_synthesize
+from whisper_service.utils import encode_opus, encode_wav
 
 from whisper_service.whisper import TranscribeParams, async_transcribe
 
@@ -44,6 +45,7 @@ async def transcribe(
     response_format: Annotated[ResponseFormat, Form()] = ResponseFormat.JSON,
     temperature: Annotated[float | None, Form()] = None,
     language: Annotated[str | None, Form()] = None,
+    word_timestamps: Annotated[bool, Form()] = False,  # Whether to return word timestamps
 ) -> Response:
     # Read & decode the WAV file
     audio = _decode_wav_file(file)
@@ -56,6 +58,7 @@ async def transcribe(
             prompt=prompt,
             temperature=temperature,
             language=language,
+            word_timestamps=word_timestamps,
         ),
     )
 
@@ -113,51 +116,20 @@ async def voice_synthesis(
         speaker_idx=speaker_idx,
     )
 
+    # Synthesize voice
     samples, sampling_rate = await async_voice_synthesize(text, params)
+
+    # Convert to int16
+    samples = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
 
     match response_format:
         case "wav":
-            file_bytes = _to_wav_file(samples, sampling_rate)
+            file_bytes = encode_wav(samples, sampling_rate)
             media_type = "audio/wav"
         case "opus":
-            file_bytes = await _to_opus_file(samples, sampling_rate)
+            file_bytes = await encode_opus(samples, sampling_rate)
             media_type = "audio/ogg"
         case _:
             raise ValueError(f"Unknown response format: {response_format}")
 
     return Response(file_bytes, media_type=media_type)
-
-
-def _to_wav_file(samples: np.ndarray, sampling_rate: int) -> bytes:
-    samples = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
-
-    wav_file = io.BytesIO()
-    with wave.open(wav_file, "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(sampling_rate)
-        wav.writeframes(samples.data)
-    return wav_file.getvalue()
-
-
-async def _to_opus_file(samples: np.ndarray, sampling_rate: int) -> bytes:
-    samples = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
-
-    # Note, default parameters are ok for us: 64kbps VBR, 48kHz, mono.
-    # start_time = time.time()
-    proc = await asyncio.create_subprocess_exec(
-        "opusenc",
-        "--raw",
-        "--quiet",
-        f"--raw-rate={sampling_rate}",
-        "--raw-chan=1",
-        "-",
-        "-",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        limit=256 * 1024,
-    )
-    # print(f"Process creation took {time.time() - start_time:.2f}s")  # 0.04s
-    output, _ = await proc.communicate(input=samples.data)
-    # print(f"Encoding took {time.time() - start_time:.2f}s")  # 0.11s - TODO: optimize
-    return output
